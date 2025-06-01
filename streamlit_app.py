@@ -7,14 +7,20 @@ import pydeck as pdk
 from utils import overpass_query, load_city_boundary, clean_poi_dataset, calculate_isochrones, dissolve_isochrone
 from link_generator import create_link_immobiliare
 
-st.title("Homie")
+st.logo(f"assets/homie-icon.png", size="large")
+
+with st.sidebar:
+    st.title("Homie")
+    st.text("Trova la tua casa ideale vicino ai mezzi pubblici")
+
 
 city_name = st.selectbox("Inserisci la città ", ("Milano", "Roma", "Torino"))
 
-transport_options = ["foot-walking", "driving-car", "cycling-regular"]
-transport_mode = st.pills("Seleziona il mezzo di trasporto", transport_options, default="foot-walking")
+col1, col2 = st.columns(2)
 
-minutes = st.slider("Seleziona il tempo di percorrenza (in minuti)", 5, 60, 10)
+transport_options = ["foot-walking", "driving-car", "cycling-regular"]
+transport_mode = col1.pills("Seleziona il mezzo di trasporto", transport_options, default="foot-walking")
+minutes = col2.slider("Seleziona il tempo di percorrenza (in minuti)", 5, 60, 10)
 
 try:
     poi_coords = overpass_query(city_name, "bus")
@@ -96,5 +102,7 @@ link = create_link_immobiliare(isochrones_gdf,priceMax, priceMin,
                                areaMin, areaMax, roomsMin, roomsMax
 )
 
-st.write("Link Immobiliare: ", link)
+col1, col2, col3 = st.columns(3)
+with col2:
+    st.button("Genera ricerca Immobiliare.it", on_click=lambda: st.write(link))
 
