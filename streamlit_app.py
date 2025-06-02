@@ -32,8 +32,6 @@ station_options_map = {
 }
 station_type = col1.pills("Seleziona il tipo di stazione", options=list(station_options_map.keys()), format_func=lambda val: station_options_map[val], default="subway")
     
-#transport_options = ["foot-walking", "driving-car", "cycling-regular"]
-
 transport_options_map = {
     "foot-walking": "A piedi",
     "driving-car": "In auto",
