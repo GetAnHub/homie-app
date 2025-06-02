@@ -93,7 +93,8 @@ def calculate_isochrones(poi_coords, mode, time_minutes):
     try:
         # OpenRouteService API endpoint
         ors_url = "https://api.openrouteservice.org/v2/isochrones/" + mode # modes: cycling-regular, cycling-electric, driving-car, foot-walking
-        api_key = "5b3ce3597851110001cf6248a0daf93b2ba54f95b8bb3266ed6fcae6"
+        #api_key = "5b3ce3597851110001cf6248a0daf93b2ba54f95b8bb3266ed6fcae6"
+        api_key = "5b3ce3597851110001cf62480c0a8084fb284f72a913a0269907ada3"
 
         isochrones = []
         
