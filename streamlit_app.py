@@ -126,5 +126,5 @@ if submitted:
 
     col1, col2, col3 = st.columns(3)
     with col2:
-        st.button("Genera ricerca Immobiliare.it", on_click=lambda: st.write(link))
+        st.link_button("Genera ricerca Immobiliare.it", url=link, type="primary")
 
