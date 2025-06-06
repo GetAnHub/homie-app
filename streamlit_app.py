@@ -11,7 +11,7 @@ st.set_page_config(
     page_title="Homie",
     page_icon="assets/homie-icon.png",
     layout="centered",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 st.logo(f"assets/homie-icon.png", size="large")
@@ -41,6 +41,42 @@ transport_mode = col2.pills("Seleziona il mezzo di trasporto", options=list(tran
     
 minutes = col3.slider("Seleziona il tempo di percorrenza (in minuti)", 5, 60, 10)
 
+col1, col2 = st.columns(2)
+
+priceMin = col1.number_input("Prezzo Minimo", 0, value = 250000, step=10000)
+priceMax = col2.number_input("Prezzo Massimo", 0, value = 350000, step=10000)
+
+col3, col4 = st.columns(2)
+
+areaMin = col3.number_input("Superficie Minima", 0, value = 60, step=5)
+areaMax = col4.number_input("Superficie Massima", 0, value = 80, step=5)
+
+col5, col6 = st.columns(2)
+
+roomsMin = col5.number_input("Locali Minimi", 0, value = 2, step=1)
+roomsMax = col6.number_input("Locali Massimi", 0, value = 3, step=1)
+
+col7, col8 = st.columns(2)
+typology_options_map = {
+    "4": "Appartamento",
+    "5": "Attico/Mansarda",
+    "7": "Casa indipendente",
+    "31": "Loft",
+    "12": "Villa",
+}
+typology = col7.pills("Tipologia", options=list(typology_options_map.keys()), format_func=lambda val: typology_options_map[val], default="4")
+n_bagni = col8.number_input("Numero di bagni", 0, value = 1, step=1)
+
+col9, col10 = st.columns(2)
+fascia_piano_map = {
+    "10": "Piano terra",
+    "20": "Piani intermedi",
+    "30": "Ultimo piano",
+}
+fascia_piano = col9.pills("Fascia Piano", options=list(fascia_piano_map.keys()), format_func=lambda val: fascia_piano_map[val], default="10")
+asta_bool = col10.selectbox("Escludi aste", ["Sì", "No"])
+asta = 1 if asta_bool == 'Sì' else 0
+
 submitted = st.button("Cerca case", type="primary")
 
 if submitted:
@@ -54,9 +90,8 @@ if submitted:
     city_boundary = load_city_boundary(city_name)
     poi_coords = clean_poi_dataset(poi_coords, city_boundary)
 
-    poi_coords_straight = poi_coords[:1]
-    #poi_coords_inverted = [(lon, lat) for lat, lon in poi_coords]
-    #poi_coords_inverted = poi_coords_inverted[:2]
+    poi_coords_straight = poi_coords[:2]
+    #poi_coords_inverted = [(lon, lat) for lat, lon in poi_coords_straight]
 
     st.write("POI Coordinates Testing:", poi_coords_straight)
 
@@ -71,27 +106,41 @@ if submitted:
         lambda geom: [list(geom.exterior.coords)] if geom.geom_type == "Polygon" else []
     )
 
-    # Create pydeck layer
-    layer = pdk.Layer(
+    # Create isochrones layer
+    layer_iso = pdk.Layer(
         "PolygonLayer",
         data=isochrones_gdf,
         get_polygon="coordinates",
+        get_fill_color=[0, 222, 77, 75],
+        pickable=False,
+        auto_highlight=False,
+    )
+    # Create stations layer
+    layer_stations = pdk.Layer(
+        "ScatterplotLayer",
+        data=pd.DataFrame(poi_coords_straight, columns=["lat", "lon", "name"]),
+        get_position=["lon", "lat"],  # Correctly reference longitude and latitude
         get_fill_color=[255, 0, 0, 100],
-        get_line_color=[255, 255, 255, 200],
+        get_radius=150,  # Set radius for the scatterplot points
         pickable=True,
         auto_highlight=True,
     )
 
     # Define initial view
     initial_view = pdk.ViewState(
-        latitude=poi_coords_straight[0][0],
-        longitude=poi_coords_straight[0][1],
+        latitude=poi_coords_straight[0]["lat"],
+        longitude=poi_coords_straight[0]["lon"],
         zoom=9,
     )
 
-    # Render the deck with a white background basemap
+    # Render the deck with a background basemap
+
     deck = pdk.Deck(
-        layers=[layer],
+        layers=[layer_iso, layer_stations],
+        tooltip={
+            "html": "Stazione: <b>{name}</b>",
+            "style": {"color": "white"},
+        },
         initial_view_state=initial_view,
         map_style="mapbox://styles/mapbox/dark-v11",  # Mapbox style with white background
         #map_style="light",  
@@ -99,32 +148,16 @@ if submitted:
 
     st.pydeck_chart(deck)
 
-    st.write("POIs Map")
+    #st.write("POIs Map")
     # Display POIs coordinates on a map
-    metro_df = pd.DataFrame(poi_coords, columns=["lat", "lon"])
-    st.map(metro_df)
-
-
-    col1, col2 = st.columns(2)
-
-    priceMin = col1.number_input("Prezzo Minimo", 0, value = 250000, step=10000)
-    priceMax = col2.number_input("Prezzo Massimo", 0, value = 350000, step=10000)
-
-    col3, col4 = st.columns(2)
-
-    areaMin = col3.number_input("Superficie Minima", 0, value = 60, step=5)
-    areaMax = col4.number_input("Superficie Massima", 0, value = 80, step=5)
-
-    col5, col6 = st.columns(2)
-
-    roomsMin = col5.number_input("Locali Minimi", 0, value = 2, step=1)
-    roomsMax = col6.number_input("Locali Massimi", 0, value = 3, step=1)
+    #metro_df = pd.DataFrame(poi_coords, columns=["lat", "lon"])
+    #st.map(metro_df)
 
     link = create_link_immobiliare(isochrones_gdf,priceMax, priceMin, 
-                                areaMin, areaMax, roomsMin, roomsMax
+                                areaMin, areaMax, roomsMin, roomsMax, 
+                                n_bagni, typology, fascia_piano, asta
     )
 
     col1, col2, col3 = st.columns(3)
     with col2:
-        st.link_button("Genera ricerca Immobiliare.it", url=link, type="primary")
-
+        st.link_button("Apri ricerca Immobiliare.it", url=link, type="primary")

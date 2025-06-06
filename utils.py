@@ -49,8 +49,16 @@ def overpass_query(city, poi_type):
     response = requests.post(url, data={"data": query})
     response.raise_for_status()
     data = response.json()
+
+    #st.write("Sample station name:", data["elements"][0]["tags"].get("name", "Unknown"))
+    #st.write("Sample station name:", data["elements"])
+
     coords = [
-        (element["lat"], element["lon"])
+        {
+            "lat": element["lat"],
+            "lon": element["lon"],
+            "name": element["tags"].get("name", "Unknown")
+        }
         for element in data.get("elements", [])
         if "lat" in element and "lon" in element
     ]
@@ -73,13 +81,21 @@ def clean_poi_dataset(poi_coords, boundary):
     Filter POI coordinates to ensure they are within the city boundary.
 
     Args:
-        poi_coords (list of (lat, lon)): List of POI coordinates.
+        poi_coords (list of dict): List of POI coordinates with keys 'lat', 'lon', and 'name'.
         boundary (Polygon or MultiPolygon): City boundary as a shapely geometry.
+
+    Returns:
+        list of dict: Filtered POI coordinates within the city boundary.
     """
     boundary_shape = shape(boundary)
     filtered_coords = [
-        (lat, lon) for lat, lon in poi_coords
-        if boundary_shape.contains(shape({"type": "Point", "coordinates": (lon, lat)}))
+        {
+            "lat": poi["lat"],
+            "lon": poi["lon"],
+            "name": poi["name"]
+        }
+        for poi in poi_coords
+        if boundary_shape.contains(shape({"type": "Point", "coordinates": (poi["lon"], poi["lat"])}))
     ]
     return filtered_coords
 
@@ -100,9 +116,9 @@ def calculate_isochrones(poi_coords, mode, time_minutes):
         
         with st.spinner("Calculating isochrones..."):
                
-            for lat, lon in poi_coords:
+            for poi in poi_coords:
                 payload = {
-                    "locations": [[lon, lat]],
+                    "locations": [[poi["lon"], poi["lat"]]],
                     "range": [time_minutes * 60],  # Convert minutes to seconds
                     "range_type": "time",
                     "attributes": ["area"]
