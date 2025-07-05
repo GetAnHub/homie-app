@@ -1,8 +1,12 @@
 import requests
 import time
 import streamlit as st
-from shapely.geometry import shape, Polygon, MultiPolygon
+from shapely.geometry import shape, Polygon, MultiPolygon, LineString
+from shapely.geometry import GeometryCollection
 import geopandas as gpd
+from shapely.ops import nearest_points, unary_union
+import matplotlib.pyplot as plt 
+
 
 
 def overpass_query(city, poi_type):
@@ -73,8 +77,18 @@ def load_city_boundary(city_name):
     except FileNotFoundError:
         raise FileNotFoundError(f"Boundary file for {city_name} not found at {file_path}.")
     except Exception as e:
-        raise RuntimeError(f"Error loading city boundary: {e}")    
+        raise RuntimeError(f"Error loading city boundary: {e}")
 
+def load_geojson(filename):
+    file_path = f"data/{filename}.geojson"
+    try:
+        with open(file_path, "r") as file:
+            boundary = gpd.read_file(file)
+        return boundary.geometry.unary_union.__geo_interface__
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Boundary file for {city_name} not found at {file_path}.")
+    except Exception as e:
+        raise RuntimeError(f"Error loading city boundary: {e}")  
 
 def clean_poi_dataset(poi_coords, boundary):
     """
@@ -99,7 +113,6 @@ def clean_poi_dataset(poi_coords, boundary):
     ]
     return filtered_coords
 
-
 # Calculate walking isochrones for the POIs using OpenRouteService API
 def calculate_isochrones(poi_coords, mode, time_minutes):
     """
@@ -114,7 +127,7 @@ def calculate_isochrones(poi_coords, mode, time_minutes):
 
         isochrones = []
         
-        with st.spinner("Calculating isochrones..."):
+        with st.spinner("Calcolo isocrone..."):
                
             for poi in poi_coords:
                 payload = {
@@ -136,12 +149,12 @@ def calculate_isochrones(poi_coords, mode, time_minutes):
                     if geometry:
                         isochrones.append(geometry)
                 time.sleep(3)
-        st.success(f"Fetched {len(isochrones)} isochrones for {len(poi_coords)} POIs.")
+        st.success(f"Calcolate isocrone attorno a {len(poi_coords)} stazioni.")
 
         return isochrones
 
     except Exception as e:
-        st.warning(f"Could not calculate isochrones: {e}")
+        st.warning(f"Impossibile calcolare le isocrone, riprova. {e}")
         return []
     
 # Dissolve all isochrones into a single geometry
@@ -154,3 +167,93 @@ def dissolve_isochrone(iso_polygon):
         isochrones_shapes  = list(iso_polygon_diss.geoms)
 
     return isochrones_shapes
+
+
+def connect_polygons(polygons, bridge_width=1e-6):
+    """
+    Connect a list of shapely Polygon geometries by creating bridges between them so that all polygons
+    are linked into a single continuous shape. Bridges are created along the minimum spanning tree (MST)
+    based on the pairwise distances between polygons.
+
+    Parameters:
+    - polygons: list of shapely Polygon geometries
+    - bridge_width: float, width for buffer around connecting lines
+
+    Returns:
+    - A single shapely Polygon or MultiPolygon representing the unified connected shape.
+    """
+    if not polygons:
+        return None
+    if len(polygons) == 1:
+        return polygons[0]
+
+    n = len(polygons)
+    bridges = []
+    # Build a Minimum Spanning Tree (MST) using Prim's algorithm
+    connected = {0}
+    available = set(range(1, n))
+    
+    while available:
+        min_edge = None
+        min_dist = float('inf')
+        for i in connected:
+            for j in available:
+                # Calculate the distance between the two polygons
+                dist = polygons[i].distance(polygons[j])
+                if dist < min_dist:
+                    min_dist = dist
+                    min_edge = (i, j)
+        # Create a bridge between the closest points of the two polygons in the chosen edge
+        i, j = min_edge
+        p1, p2 = nearest_points(polygons[i], polygons[j])
+        bridge = LineString([p1, p2]).buffer(bridge_width)
+        bridges.append(bridge)
+        connected.add(j)
+        available.remove(j)
+    
+    unified = unary_union(polygons + bridges)
+    return unified
+
+def check_if_shapely_polygon(geometry):
+    return isinstance(geometry, (Polygon, MultiPolygon))
+
+def plot_polygon(geom, figsize=(8, 6), edgecolor='black', facecolor='blue', alpha=0.5):
+    """
+    Streamlit helper to plot a single shapely Polygon or MultiPolygon.
+
+    Parameters:
+    - geom: shapely geometry (Polygon or MultiPolygon)
+    - figsize: tuple for figure size (width, height)
+    - edgecolor: border color
+    - facecolor: fill color
+    - alpha: transparency
+    """
+    # Wrap geometry in GeoDataFrame
+    gdf = gpd.GeoDataFrame(geometry=[geom], crs="EPSG:4326")
+    # Create matplotlib figure
+    fig, ax = plt.subplots(figsize=figsize)
+    gdf.plot(ax=ax, edgecolor=edgecolor, facecolor=facecolor, alpha=alpha)
+    ax.set_axis_off()
+    st.pyplot(fig)
+
+def count_vertices(geom):
+    """
+    Count the number of vertices in a shapely Polygon or MultiPolygon.
+
+    Parameters:
+    - geom: shapely Polygon or MultiPolygon
+
+    Returns:
+    - int: total count of distinct vertices (excluding repeated closing coordinates)
+    """
+    if isinstance(geom, Polygon):
+        # Exterior ring: subtract the repeated closing coordinate
+        exterior_count = len(geom.exterior.coords) - 1
+        # Sum interior rings similarly
+        interior_count = sum(len(ring.coords) - 1 for ring in geom.interiors)
+        return exterior_count + interior_count
+    elif isinstance(geom, MultiPolygon):
+        # Sum over all component polygons
+        return sum(count_vertices(poly) for poly in geom.geoms)
+    else:
+        raise TypeError(f"Unsupported geometry type: {type(geom)}")
