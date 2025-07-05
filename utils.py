@@ -144,8 +144,6 @@ def calculate_isochrones(poi_coords, mode, time_minutes):
         st.warning(f"Could not calculate isochrones: {e}")
         return []
     
-
-
 # Dissolve all isochrones into a single geometry
 def dissolve_isochrone(iso_polygon):
     iso_polygon_diss = gpd.GeoSeries([shape(geometry) for geometry in iso_polygon]).unary_union
